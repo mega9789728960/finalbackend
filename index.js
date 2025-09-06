@@ -14,5 +14,5 @@ api.use(sendcoderouter);
 api.use(emailverifyrouter);
 api.use(loginrouter);
 api.use(registerrouter);
-export default api
+export default api;
 

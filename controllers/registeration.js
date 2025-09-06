@@ -40,31 +40,13 @@ async function registeration(req, res) {
     }
 
     const userId = authData.user?.id;
-
+    req.body.user_id = userId;
+    console.log(req.body)
     // Step 3: Insert into students table (user_id instead of auth_id)
     const { data: studentData, error: studentError } = await supabase
-      .from("students")
-      .insert([
-        {
-          email,
-          name,
-          password, // ⚠️ better to hash this before inserting
-          user_id: userId, // foreign key to auth.users
-          father_guardian_name: "Unknown", // required fields
-          dob: "2000-01-01",
-          blood_group: null,
-          student_contact_number: null,
-          parent_guardian_contact_number: "0000000000",
-          address: "Not Provided",
-          department: "Unknown",
-          academic_year: "2025",
-          registration_number: "TEMP123",
-          roll_number: "TEMP001",
-          room_number: 101,
-          profile_photo: "default.png",
-        },
-      ])
-      .select();
+      .from("students").insert([req.body]).select();
+
+    console.log(studentData);
 
     if (studentError) {
       return res.status(400).json({
@@ -77,7 +59,7 @@ async function registeration(req, res) {
     return res.status(201).json({
       success: true,
       message: "User registered successfully",
-      user: studentData[0],
+      user: studentData[0]
     });
   } catch (err) {
     return res.status(500).json({
