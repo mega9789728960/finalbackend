@@ -5,6 +5,7 @@ import emailverifyrouter from "./routers/emailverifyrouter.js";
 import sendcoderouter from "./routers/sendcoderouter.js";
 import loginrouter from "./routers/loginrouter.js";
 import registerrouter from "./routers/registerrouter.js";
+import fetchstudentrouter from "./routers/fetchstudentsrouter.js";
 
 const api = express();
 api.use(express.json());
@@ -14,5 +15,6 @@ api.use(sendcoderouter);
 api.use(emailverifyrouter);
 api.use(loginrouter);
 api.use(registerrouter);
-export default api;
+api.use(fetchstudentrouter);
 
+export default api;
