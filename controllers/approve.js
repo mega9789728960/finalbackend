@@ -16,7 +16,7 @@ async function approve(req, res) {
     console.log(await supabase.from("students").select("*").eq("registration_number",registerno));
     const { data, error } = await supabase
       .from("students")
-      .update({ status: "approved" })
+      .update({ status: "active" })
       .eq("registration_number", registerno)
       .select(); // return updated row
 
