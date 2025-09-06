@@ -26,6 +26,16 @@ async function emailpush(req, res) {
       .insert([{ email, code }]);
 
     if (error) {
+      // ✅ Custom handling for duplicate email constraint
+      if (error.code === "23505") {
+        return res.status(200).json({
+          success: false,
+          exist: true,
+          message: "Email already exists in verification table",
+        });
+      }
+
+      // Keep existing exception handling
       console.error("Supabase Insert Error:", error.message);
       return res.status(500).json({ success: false, error: error.message });
     }
@@ -33,7 +43,7 @@ async function emailpush(req, res) {
     return res.status(201).json({
       success: true,
       message: "Verification code generated and stored",
-      data: { email, code }, // ⚠️ remove `code` here in production (don’t expose OTP to client)
+      data: { email, code }, // ⚠️ remove `code` here in production
     });
 
   } catch (err) {
