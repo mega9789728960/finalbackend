@@ -38,7 +38,7 @@ async function sendcode(req, res) {
         return res.status(200).json({
           success: true,
           message: "OTP still valid, not expired yet",
-          expiredtime: expireString
+          expiringtime: expireString
         });
       }
     }
