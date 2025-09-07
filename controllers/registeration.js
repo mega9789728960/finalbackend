@@ -25,7 +25,7 @@ async function registeration(req, res) {
       });
     }
 
-    // Step 2: Create Supabase Auth user (signup)
+    // Step 2: Create Supabase Auth user
     const { data: authData, error: authError } = await supabase.auth.signUp({
       email,
       password,
@@ -41,17 +41,20 @@ async function registeration(req, res) {
 
     const userId = authData.user?.id;
     req.body.user_id = userId;
-    console.log(req.body)
-    // Step 3: Insert into students table (user_id instead of auth_id)
-    const { data: studentData, error: studentError } = await supabase
-      .from("students").insert([req.body]).select();
 
-    console.log(studentData);
+    // Step 3: Insert into students table
+    const { data: studentData, error: studentError } = await supabase
+      .from("students")
+      .insert([req.body])
+      .select();
 
     if (studentError) {
+      // ❌ Rollback Supabase Auth user
+      await supabase.auth.admin.deleteUser(userId);
+
       return res.status(400).json({
         success: false,
-        message: "Failed to insert student data",
+        message: "Failed to insert student data. User account removed.",
         error: studentError.message,
       });
     }
@@ -59,7 +62,7 @@ async function registeration(req, res) {
     return res.status(201).json({
       success: true,
       message: "User registered successfully",
-      user: studentData[0]
+      user: studentData[0],
     });
   } catch (err) {
     return res.status(500).json({

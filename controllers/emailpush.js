@@ -4,36 +4,76 @@ async function emailpush(req, res) {
   try {
     const { email } = req.body;
 
-    // Basic validation
+    // ✅ Validate first
     if (!email) {
       return res.status(400).json({ success: false, error: "Email is required" });
     }
 
-    // OTP generator
-    function generateNumericCode(length = 6) {
-      let code = "";
-      for (let i = 0; i < length; i++) {
-        code += Math.floor(Math.random() * 10);
-      }
-      return code;
+    // ✅ Check if already in student table
+    const { data: alreadyInRegister, error: studentError } = await supabase
+      .from("students")
+      .select("id")
+      .eq("email", email);
+
+    if (studentError) {
+      console.error("Supabase Student Fetch Error:", studentError.message);
+      return res.status(500).json({ success: false, error: studentError.message });
     }
 
-    const code = generateNumericCode();
+    if (alreadyInRegister.length > 0) {
+      return res.status(409).json({
+        success: false,
+        message: "Email is already registered",
+        data: { email },
+      });
+    }
 
-    // Insert into Supabase
-    const { data, error } = await supabase
+    // ✅ Check if email exists in emailverification
+    const { data: already, error: fetchError } = await supabase
       .from("emailverification")
-      .insert([{ email, code }]);
+      .select("verified")
+      .eq("email", email);
 
-    if (error) {
-      console.error("Supabase Insert Error:", error.message);
-      return res.status(500).json({ success: false, error: error.message });
+    if (fetchError) {
+      console.error("Supabase Fetch Error:", fetchError.message);
+      return res.status(500).json({ success: false, error: fetchError.message });
+    }
+
+    if (already.length > 0) {
+      const verified = already[0].verified;
+
+      if (!verified) {
+        return res.status(200).json({
+          success: true,
+          message: "Email already exists, pending verification",
+          data: { email },
+        });
+      }
+
+      return res.status(409).json({
+        success: false,
+        message: "Email already verified",
+        data: { email },
+      });
+    }
+
+    // ✅ Insert new row
+    const { error: insertError } = await supabase
+      .from("emailverification")
+      .insert([{ email }]);
+
+    if (insertError) {
+      if (insertError.code === "23505") { // unique_violation
+        return res.status(409).json({ success: false, error: "Email already exists" });
+      }
+      console.error("Supabase Insert Error:", insertError.message);
+      return res.status(500).json({ success: false, error: insertError.message });
     }
 
     return res.status(201).json({
       success: true,
-      message: "Verification code generated and stored",
-      data: { email, code }, // ⚠️ remove `code` here in production (don’t expose OTP to client)
+      message: "Email record initialized, waiting for verification code",
+      data: { email },
     });
 
   } catch (err) {

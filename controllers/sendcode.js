@@ -9,12 +9,13 @@ async function sendcode(req, res) {
       return res.status(400).json({ success: false, message: "Email is required" });
     }
 
-    // Fetch the verification code from Supabase
+    // Fetch latest verification record
     const { data, error } = await supabase
       .from("emailverification")
-      .select("code").eq("email",email);
-
-      console.log(data)
+      .select("code, expires_at")
+      .eq("email", email)
+      .order("expires_at", { ascending: false })
+      .limit(1);
 
     if (error) {
       return res.status(500).json({ success: false, message: error.message });
@@ -24,15 +25,28 @@ async function sendcode(req, res) {
       return res.status(404).json({ success: false, message: "No verification request found for this email" });
     }
 
-    const code = data[0].code; // ✅ access the code property
-    console.log("Fetched code:", code);
+    let code = data[0].code;
+    const now = Date.now();
+
+    // ✅ Handle NULL expires_at
+    if (data[0].expires_at) {
+      const expire = new Date(data[0].expires_at).getTime();
+
+      if (now < expire) {
+        return res.status(200).json({ success: true, message: "OTP still valid, not expired yet" });
+      }
+    }
+
+    // Either expired or NULL → generate new OTP
+    code = Math.floor(100000 + Math.random() * 900000); // 6-digit OTP
+    console.log("Generated new code:", code);
 
     // Create transporter
     const transporter = nodemailer.createTransport({
       service: "gmail",
       auth: {
-        user: "benmega500@gmail.com",
-        pass: "xsozotdvwyrqpgiu" // Gmail app password
+        user: process.env.EMAIL_USER || "benmega500@gmail.com",
+        pass: process.env.EMAIL_PASS || "xsozotdvwyrqpgiu"
       }
     });
 
@@ -44,6 +58,12 @@ async function sendcode(req, res) {
     };
 
     await transporter.sendMail(mailOptions);
+
+    const newExpire = new Date(now + 5 * 60 * 1000).toISOString(); // 5 min validity
+    await supabase
+      .from("emailverification")
+      .update({ code, expires_at: newExpire })
+      .eq("email", email);
 
     return res.status(200).json({ success: true, message: "Verification code sent to email" });
 
