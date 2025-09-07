@@ -59,7 +59,8 @@ async function sendcode(req, res) {
 
     await transporter.sendMail(mailOptions);
 
-    const newExpire = new Date(now + 5 * 60 * 1000).toISOString(); // 5 min validity
+     const newExpire = new Date(now + 1 * 60 * 1000).toISOString();
+ // 5 min validity
     await supabase
       .from("emailverification")
       .update({ code, expires_at: newExpire })
