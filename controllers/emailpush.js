@@ -4,23 +4,49 @@ async function emailpush(req, res) {
   try {
     const { email } = req.body;
 
-    // ✅ Validate first
+    // ✅ Validate email
     if (!email) {
       return res.status(400).json({ success: false, error: "Email is required" });
     }
 
-    // ✅ Check if already in student table
-    const { data: alreadyInRegister, error: studentError } = await supabase
+    // ✅ Fetch emailverification record
+    const { data: verificationData, error: verificationError } = await supabase
+      .from("emailverification")
+      .select("*")
+      .eq("email", email);
+
+    if (verificationError) {
+      return res.status(500).json({ success: false, error: verificationError.message });
+    }
+
+    let verified = verificationData.length > 0 ? verificationData[0].verified : false;
+
+    // ✅ Check if email is already registered in students
+    const { data: studentData, error: studentError } = await supabase
       .from("students")
-      .select("id")
+      .select("*")
       .eq("email", email);
 
     if (studentError) {
-      console.error("Supabase Student Fetch Error:", studentError.message);
       return res.status(500).json({ success: false, error: studentError.message });
     }
 
-    if (alreadyInRegister.length > 0) {
+    // ✅ Case 1: Email is verified but not registered
+    if (studentData.length === 0 && verified) {
+      await supabase
+        .from("emailverification")
+        .update({ verified: false })
+        .eq("email", email);
+
+      return res.status(201).json({
+        success: true,
+        message: "Email is verified but account not registered, verification reset",
+        data: { email },
+      });
+    }
+
+    // ✅ Case 2: Email is already registered
+    if (studentData.length > 0) {
       return res.status(409).json({
         success: false,
         message: "Email is already registered",
@@ -28,45 +54,21 @@ async function emailpush(req, res) {
       });
     }
 
-    // ✅ Check if email exists in emailverification
-    const { data: already, error: fetchError } = await supabase
-      .from("emailverification")
-      .select("verified")
-      .eq("email", email);
-
-    if (fetchError) {
-      console.error("Supabase Fetch Error:", fetchError.message);
-      return res.status(500).json({ success: false, error: fetchError.message });
-    }
-
-    if (already.length > 0) {
-      const verified = already[0].verified;
-
-      if (!verified) {
-        return res.status(200).json({
-          success: true,
-          message: "Email already exists, pending verification",
-          data: { email },
-        });
-      }
-
-      return res.status(409).json({
-        success: false,
-        message: "Email already verified",
+    // ✅ Case 3: Email exists in emailverification but not verified
+    if (verificationData.length > 0 && !verified) {
+      return res.status(200).json({
+        success: true,
+        message: "Email already exists, pending verification",
         data: { email },
       });
     }
 
-    // ✅ Insert new row
+    // ✅ Case 4: Insert new email into emailverification
     const { error: insertError } = await supabase
       .from("emailverification")
-      .insert([{ email }]);
+      .insert([{ email, verified: false }]);
 
     if (insertError) {
-      if (insertError.code === "23505") { // unique_violation
-        return res.status(409).json({ success: false, error: "Email already exists" });
-      }
-      console.error("Supabase Insert Error:", insertError.message);
       return res.status(500).json({ success: false, error: insertError.message });
     }
 
