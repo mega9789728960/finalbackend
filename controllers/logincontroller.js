@@ -5,6 +5,7 @@ import jwt from "jsonwebtoken"; // optional, for session tokens
 export async function loginController(req, res) {
   try {
     const { email, password } = req.body;
+    
 
     // 1️⃣ Validate input
     if (!email || !password) {
@@ -36,7 +37,7 @@ export async function loginController(req, res) {
     }
 
     // 5️⃣ Compare password (assuming stored as hashed)
-    const validPassword = await bcrypt.compare(password, user.password);
+    const validPassword = (password===user.password) ;
     if (!validPassword) {
       return res.status(401).json({ success: false, error: "Invalid password" });
     }
