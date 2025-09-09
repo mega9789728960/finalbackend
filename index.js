@@ -18,6 +18,4 @@ api.use(loginrouter);
 api.use(registerrouter);
 api.use(fetchstudentrouter);
 api.use(approverouter);
-
-
-api.listen(3001)
+export default api
