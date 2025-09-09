@@ -37,7 +37,7 @@ export async function loginController(req, res) {
     }
 
     // 5️⃣ Compare password (assuming stored as hashed)
-    const validPassword = (password===user.password) ;
+    const validPassword = bcrypt.hash(password,user.password,10) ;
     if (!validPassword) {
       return res.status(401).json({ success: false, error: "Invalid password" });
     }
