@@ -1,4 +1,4 @@
-import supabase from "../database/database.js";
+import pool from "../database/database.js";
 
 async function emailpush(req, res) {
   try {
@@ -10,33 +10,26 @@ async function emailpush(req, res) {
     }
 
     // ✅ Fetch emailverification record
-    const { data: verificationData, error: verificationError } = await supabase
-      .from("emailverification")
-      .select("*")
-      .eq("email", email);
-
-    if (verificationError) {
-      return res.status(500).json({ success: false, error: verificationError.message });
-    }
-
+    const verificationResult = await pool.query(
+      "SELECT * FROM emailverification WHERE email = $1",
+      [email]
+    );
+    const verificationData = verificationResult.rows;
     let verified = verificationData.length > 0 ? verificationData[0].verified : false;
 
     // ✅ Check if email is already registered in students
-    const { data: studentData, error: studentError } = await supabase
-      .from("students")
-      .select("*")
-      .eq("email", email);
-
-    if (studentError) {
-      return res.status(500).json({ success: false, error: studentError.message });
-    }
+    const studentResult = await pool.query(
+      "SELECT * FROM students WHERE email = $1",
+      [email]
+    );
+    const studentData = studentResult.rows;
 
     // ✅ Case 1: Email is verified but not registered
     if (studentData.length === 0 && verified) {
-      await supabase
-        .from("emailverification")
-        .update({ verified: false })
-        .eq("email", email);
+      await pool.query(
+        "UPDATE emailverification SET verified = false WHERE email = $1",
+        [email]
+      );
 
       return res.status(201).json({
         success: true,
@@ -64,13 +57,10 @@ async function emailpush(req, res) {
     }
 
     // ✅ Case 4: Insert new email into emailverification
-    const { error: insertError } = await supabase
-      .from("emailverification")
-      .insert([{ email, verified: false }]);
-
-    if (insertError) {
-      return res.status(500).json({ success: false, error: insertError.message });
-    }
+    await pool.query(
+      "INSERT INTO emailverification (email, verified) VALUES ($1, $2)",
+      [email, false]
+    );
 
     return res.status(201).json({
       success: true,

@@ -1,22 +1,12 @@
-import supabase from "../database/database.js";
+import pool from "../database/database.js";
 
 async function fetchstudent(req, res) {
   try {
-    // Fetch all students
-    const { data, error } = await supabase
-      .from("students")
-      .select("*");
+    // ✅ Fetch all students
+    const result = await pool.query("SELECT * FROM students");
+    const data = result.rows;
 
     console.log(data);
-
-    if (error) {
-      console.error("Supabase Fetch Error:", error.message);
-      return res.status(500).json({
-        success: false,
-        message: "Failed to fetch students",
-        error: error.message,
-      });
-    }
 
     return res.status(200).json({
       success: true,

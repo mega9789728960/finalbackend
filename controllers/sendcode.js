@@ -1,4 +1,4 @@
-import supabase from "../database/database.js";
+import pool from "../database/database.js";
 import nodemailer from "nodemailer";
 
 async function sendcode(req, res) {
@@ -10,28 +10,22 @@ async function sendcode(req, res) {
       return res.status(400).json({ success: false, message: "Email is required" });
     }
 
-    // ✅ Fetch latest verification record
-    const { data, error } = await supabase
-      .from("emailverification")
-      .select("code, expires_at")
-      .eq("email", email)
-      .order("expires_at", { ascending: false })
-      .limit(1);
+    // ✅ Fetch latest verification record (order by expires_at desc, limit 1)
+    const result = await pool.query(
+      "SELECT code, expires_at FROM emailverification WHERE email = $1 ORDER BY expires_at DESC LIMIT 1",
+      [email]
+    );
 
-    if (error) {
-      return res.status(500).json({ success: false, message: error.message });
-    }
-
-    if (!data || data.length === 0) {
+    if (result.rows.length === 0) {
       return res.status(404).json({ success: false, message: "No verification request found for this email" });
     }
 
-    let code = data[0].code;
+    let code = result.rows[0].code;
     const now = Date.now();
 
     // ✅ Handle existing verification
-    if (data[0].expires_at) {
-      const expire = new Date(data[0].expires_at).getTime();
+    if (result.rows[0].expires_at) {
+      const expire = new Date(result.rows[0].expires_at).getTime();
       const expireString = new Date(expire).toISOString();
 
       if (now < expire) {
@@ -68,10 +62,10 @@ async function sendcode(req, res) {
     // ✅ Set new expiry time (1 minute)
     const newExpire = new Date(now + 1 * 60 * 1000).toISOString();
 
-    await supabase
-      .from("emailverification")
-      .update({ code, expires_at: newExpire })
-      .eq("email", email);
+    await pool.query(
+      "UPDATE emailverification SET code = $1, expires_at = $2 WHERE email = $3",
+      [code, newExpire, email]
+    );
 
     return res.status(200).json({
       success: true,

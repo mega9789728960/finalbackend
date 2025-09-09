@@ -1,39 +1,46 @@
-import supabase from "../database/database.js";
+import pool from "../database/database.js";
+import bcrypt from "bcrypt"; // ✅ npm install bcrypt
 
 async function registeration(req, res) {
   try {
-    const { email, password, name } = req.body;
+    const {
+      email,
+      password,
+      name,
+      father_guardian_name,
+      dob,
+      blood_group,
+      student_contact_number,
+      parent_guardian_contact_number,
+      address,
+      department,
+      academic_year,
+      registration_number,
+      roll_number,
+      room_number,
+      profile_photo
+    } = req.body;
 
     // ✅ Step 0: Check if email already exists in students table
-    const { data: existingUser, error: existingError } = await supabase
-      .from("students")
-      .select("id")
-      .eq("email", email)
-      .maybeSingle();
-
-    if (existingError) {
-      return res.status(400).json({
-        success: false,
-        message: "Something went wrong while checking the email",
-        error: existingError.message,
-      });
-    }
-
-    if (existingUser) {
+    const existingUserResult = await pool.query(
+      "SELECT id FROM students WHERE email = $1 LIMIT 1",
+      [email]
+    );
+    if (existingUserResult.rows.length > 0) {
       return res.status(409).json({
         success: false,
         message: "Email is already registered",
       });
     }
 
-    // Step 1: Check verification status
-    const { data: verificationData, error: verificationError } = await supabase
-      .from("emailverification")
-      .select("verified")
-      .eq("email", email)
-      .single();
+    // ✅ Step 1: Check verification status
+    const verificationResult = await pool.query(
+      "SELECT verified FROM emailverification WHERE email = $1 LIMIT 1",
+      [email]
+    );
+    const verificationData = verificationResult.rows[0];
 
-    if (verificationError || !verificationData) {
+    if (!verificationData) {
       return res.status(400).json({
         success: false,
         message: "No verification found for this email",
@@ -47,54 +54,41 @@ async function registeration(req, res) {
       });
     }
 
-    // Step 2: Create user account in Supabase Auth
-    const { data: authData, error: authError } = await supabase.auth.signUp({
-      email,
-      password,
-    });
+    // ✅ Step 2: Hash password
+    const hashedPassword = await bcrypt.hash(password, 10); // saltRounds = 10
 
-    if (authError) {
-      // ✅ Handle duplicate email case from Supabase Auth
-      if (authError.message.includes("User already registered")) {
-        return res.status(409).json({
-          success: false,
-          message: "Email is already registered",
-        });
-      }
-
-      return res.status(400).json({
-        success: false,
-        message: "Account creation failed. Please try again later.",
-        error: authError.message,
-      });
-    }
-
-    const userId = authData.user?.id;
-    req.body.user_id = userId;
-
-    // Step 3: Insert into students table
-    const { data: studentData, error: studentError } = await supabase
-      .from("students")
-      .insert([req.body])
-      .select();
-
-    if (studentError) {
-      // ❌ Rollback user account
-      await supabase.auth.admin.deleteUser(userId);
-
-      return res.status(400).json({
-        success: false,
-        message: "Failed to save student details. Account removed.",
-        error: studentError.message,
-      });
-    }
+    // ✅ Step 3: Insert into students table
+    const studentResult = await pool.query(
+      `INSERT INTO students 
+      (email, password, name, father_guardian_name, dob, blood_group, student_contact_number, parent_guardian_contact_number, address, department, academic_year, registration_number, roll_number, room_number, profile_photo) 
+      VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15) 
+      RETURNING *`,
+      [
+        email,
+        hashedPassword,
+        name,
+        father_guardian_name,
+        dob,
+        blood_group,
+        student_contact_number,
+        parent_guardian_contact_number,
+        address,
+        department,
+        academic_year,
+        registration_number,
+        roll_number,
+        room_number,
+        profile_photo,
+      ]
+    );
 
     return res.status(201).json({
       success: true,
       message: "User registered successfully",
-      user: studentData[0],
+      user: studentResult.rows[0],
     });
   } catch (err) {
+    console.error("Server Error:", err);
     return res.status(500).json({
       success: false,
       message: "Internal server error",

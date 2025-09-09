@@ -1,4 +1,4 @@
-import supabase from "../database/database.js";
+import pool from "../database/database.js";
 
 async function emailverify(req, res) {
   try {
@@ -8,17 +8,13 @@ async function emailverify(req, res) {
       return res.status(400).json({ success: false, message: "Email and code are required" });
     }
 
-    // Fetch the OTP for the email
-    const { data, error } = await supabase
-      .from("emailverification")
-      .select("code, verified")
-      .eq("email", email)
-      .limit(1)
-      .single(); // get only one row
+    // ✅ Fetch the OTP for the email
+    const result = await pool.query(
+      "SELECT code, verified FROM emailverification WHERE email = $1 LIMIT 1",
+      [email]
+    );
 
-    if (error && error.code !== "PGRST116") { // ignore "No rows found" error for single()
-      return res.status(500).json({ success: false, message: error.message });
-    }
+    const data = result.rows[0]; // get first row
 
     if (!data) {
       return res.status(400).json({ success: false, message: "No verification request found for this email" });
@@ -32,15 +28,11 @@ async function emailverify(req, res) {
       return res.status(400).json({ success: false, message: "Invalid verification code" });
     }
 
-    // Update the verified flag
-    const { data: updateData, error: updateError } = await supabase
-      .from("emailverification")
-      .update({ verified: true })
-      .eq("email", email);
-
-    if (updateError) {
-      return res.status(500).json({ success: false, message: updateError.message });
-    }
+    // ✅ Update the verified flag
+    await pool.query(
+      "UPDATE emailverification SET verified = true WHERE email = $1",
+      [email]
+    );
 
     return res.status(200).json({ success: true, message: "Email verified successfully" });
 

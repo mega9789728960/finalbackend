@@ -1,4 +1,6 @@
-import supabase from "../database/database.js";
+import pool from "../database/database.js";
+import bcrypt from "bcrypt"; // for password checking
+import jwt from "jsonwebtoken"; // optional, for session tokens
 
 export async function loginController(req, res) {
   try {
@@ -9,75 +11,64 @@ export async function loginController(req, res) {
       return res.status(400).json({ success: false, error: "Email and password are required" });
     }
 
-    // 2️⃣ Authenticate user with Supabase
-    const { data: authData, error: authError } = await supabase.auth.signInWithPassword({
-      email,
-      password,
-    });
+    // 2️⃣ Check if user exists in students table
+    const studentResult = await pool.query(
+      "SELECT * FROM students WHERE email = $1",
+      [email]
+    );
 
-    if (authError) {
-      return res.status(401).json({ success: false, error: authError.message });
-    }
+    let user = studentResult.rows[0];
+    let role = "student";
 
-    const session = authData.session;
-    const user = authData.user;
-
+    // 3️⃣ If not found in students, check admins
     if (!user) {
-      return res.status(401).json({ success: false, error: "Authentication failed" });
+      const adminResult = await pool.query(
+        "SELECT * FROM admins WHERE email = $1",
+        [email]
+      );
+      user = adminResult.rows[0];
+      role = "admin";
     }
 
-    const user_id = user.id;
-    console.log("User ID:", user_id);
-
-    // 3️⃣ Fetch student data
-    const { data: studentData, error: studentError } = await supabase
-      .from("students")
-      .select("*")
-      .eq("user_id", user_id);
-
-    if (studentError) {
-      console.error("Supabase query error:", studentError.message);
-      return res.status(500).json({ success: false, error: "Failed to fetch student data" });
+    // 4️⃣ If user not found in either table
+    if (!user) {
+      return res.status(404).json({ success: false, error: "No user found with this email" });
     }
 
-    // 4️⃣ Check if student data exists
-    if (studentData && studentData.length > 0) {
+    // 5️⃣ Compare password (assuming stored as hashed)
+    const validPassword = await bcrypt.compare(password, user.password);
+    if (!validPassword) {
+      return res.status(401).json({ success: false, error: "Invalid password" });
+    }
+
+    // 6️⃣ Generate JWT token (optional)
+    const token = jwt.sign(
+      { id: user.id, email: user.email, role },
+      process.env.JWT_SECRET || "mysecret",
+      { expiresIn: "1h" }
+    );
+
+    // 7️⃣ If student, return only student data
+    if (role === "student") {
       return res.status(200).json({
         success: true,
         message: "Login successful",
-        session,
-        data: studentData[0],
-        role:"student"
+        token,
+        role,
+        data: user
       });
     }
 
-    // 5️⃣ If student not found, try admin table
-    const { data: adminData, error: adminError } = await supabase
-      .from("admins")
-      .select("*")
-      .eq("user_id", user_id);
-
-    if (adminError) {
-      console.error("Supabase admin query error:", adminError.message);
-      return res.status(500).json({ success: false, error: "Failed to fetch admin data" });
-    }
-
-    const {data:studentData1,error:studentError1}=await supabase.from("students").select("*");
-
-    if (adminData && adminData.length > 0) {
-      return res.status(200).json({
-        success: true,
-        message: "Admin login successful",
-        session,
-        data: adminData[0],
-        role: "admin",
-        studentsdata:studentData1
-
-      });
-    }
-
-    // 6️⃣ If neither student nor admin found
-    return res.status(404).json({ success: false, error: "No user found with this email" });
+    // 8️⃣ If admin, fetch all students as extra data
+    const studentsResult = await pool.query("SELECT * FROM students");
+    return res.status(200).json({
+      success: true,
+      message: "Admin login successful",
+      token,
+      role,
+      data: user,
+      studentsdata: studentsResult.rows
+    });
 
   } catch (err) {
     console.error("Unexpected error:", err);
