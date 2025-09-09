@@ -19,4 +19,9 @@ api.use(registerrouter);
 api.use(fetchstudentrouter);
 api.use(approverouter);
 
+// Root route to handle "/" requests
+api.get("/", (req, res) => {
+  res.json({ message: "API is running" });
+});
+
 export default api;
