@@ -1,52 +1,48 @@
 import pool from "../database/database.js";
 import nodemailer from "nodemailer";
 
+
 async function sendcode(req, res) {
   try {
     const { email } = req.body;
 
-    // ✅ Validate email
+    // ✅ Validate email early
     if (!email) {
       return res.status(400).json({ success: false, message: "Email is required" });
     }
 
-    // ✅ Fetch latest verification record (order by expires_at desc, limit 1)
-    const result = await pool.query(
+    // ✅ Fetch latest verification record (only required fields)
+    const { rows } = await pool.query(
       "SELECT code, expires_at FROM emailverification WHERE email = $1 ORDER BY expires_at DESC LIMIT 1",
       [email]
     );
 
-    if (result.rows.length === 0) {
-      return res.status(404).json({ success: false, message: "No verification request found for this email" });
-    }
-
-    let code = result.rows[0].code;
     const now = Date.now();
+    let code;
 
-    // ✅ Handle existing verification
-    if (result.rows[0].expires_at) {
-      const expire = new Date(result.rows[0].expires_at).getTime();
-      const expireString = new Date(expire).toISOString();
+    if (rows.length > 0) {
+      const { code: existingCode, expires_at } = rows[0];
 
-      if (now < expire) {
+      // ✅ If current OTP is still valid, return without sending a new one
+      if (expires_at && new Date(expires_at).getTime() > now) {
         return res.status(200).json({
           success: true,
           message: "OTP still valid, not expired yet",
-          expiringtime: expireString
+          expiringtime: new Date(expires_at).toISOString()
         });
       }
     }
 
-    // ✅ Generate new OTP (6 digits)
+    // ✅ Generate new 6-digit OTP
     code = Math.floor(100000 + Math.random() * 900000);
     console.log("Generated new code:", code);
 
-    // ✅ Setup email transporter
+    // ✅ Setup email transporter with hardcoded credentials
     const transporter = nodemailer.createTransport({
       service: "gmail",
       auth: {
-        user: process.env.EMAIL_USER || "benmega500@gmail.com",
-        pass: process.env.EMAIL_PASS || "xsozotdvwyrqpgiu"
+        user: "benmega500@gmail.com",
+        pass: "xsozotdvwyrqpgiu"
       }
     });
 
@@ -59,17 +55,28 @@ async function sendcode(req, res) {
 
     await transporter.sendMail(mailOptions);
 
-    // ✅ Set new expiry time (1 minute)
+    // ✅ Set expiry time 1 minute from now
     const newExpire = new Date(now + 1 * 60 * 1000).toISOString();
 
+    // ✅ Update or insert verification record (upsert pattern)
     await pool.query(
-      "UPDATE emailverification SET code = $1, expires_at = $2 WHERE email = $3",
-      [code, newExpire, email]
+      `INSERT INTO emailverification (email, code, expires_at)
+       VALUES ($1, $2, $3)
+       ON CONFLICT (email)
+       DO UPDATE SET code = EXCLUDED.code, expires_at = EXCLUDED.expires_at`,
+      [email, code, newExpire]
     );
+    
+
+
+
+    
 
     return res.status(200).json({
       success: true,
-      message: "Verification code sent to email"
+      message: "Verification code sent to email",
+      codeSent: true,
+      
     });
 
   } catch (err) {

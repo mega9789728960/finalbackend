@@ -2,17 +2,21 @@ import pool from "../database/database.js";
 
 async function fetchstudent(req, res) {
   try {
-    // ✅ Fetch all students
+    // ✅ Correct way to read token
+    const token = req.body.token;  // <-- no destructuring
+
     const result = await pool.query("SELECT * FROM students");
     const data = result.rows;
 
     console.log(data);
 
     return res.status(200).json({
+  // ✅ now it will show up
       success: true,
       message: "Students fetched successfully",
-      count: data.length, // number of records
-      students: data,     // the actual rows
+      count: data.length,
+      students: data,
+           token: token 
     });
   } catch (err) {
     console.error("Server Error:", err);

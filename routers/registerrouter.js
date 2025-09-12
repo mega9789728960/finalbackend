@@ -1,7 +1,7 @@
 import express from "express"
-import registeration from "../controllers/registeration.js";
+import registration from "../controllers/registeration.js";
 
 const registerrouter = express.Router();
-registerrouter.use("/register",registeration);
+registerrouter.use("/register",registration);
 
 export default registerrouter;

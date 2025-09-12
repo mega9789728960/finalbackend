@@ -1,7 +1,7 @@
 import pool from "../database/database.js";
-import bcrypt from "bcrypt"; // ✅ npm install bcrypt
+import bcrypt from "bcrypt";
 
-async function registeration(req, res) {
+async function registration(req, res) {
   try {
     const {
       email,
@@ -21,12 +21,20 @@ async function registeration(req, res) {
       profile_photo
     } = req.body;
 
-    // ✅ Step 0: Check if email already exists in students table
-    const existingUserResult = await pool.query(
+    // ✅ Validate required fields upfront
+    if (!email || !password || !name || !registration_number) {
+      return res.status(400).json({
+        success: false,
+        message: "Email, password, name, and registration number are required",
+      });
+    }
+
+    // ✅ Step 0: Check if email already exists
+    const existingUser = await pool.query(
       "SELECT id FROM students WHERE email = $1 LIMIT 1",
       [email]
     );
-    if (existingUserResult.rows.length > 0) {
+    if (existingUser.rows.length) {
       return res.status(409).json({
         success: false,
         message: "Email is already registered",
@@ -40,55 +48,50 @@ async function registeration(req, res) {
     );
     const verificationData = verificationResult.rows[0];
 
-    if (!verificationData) {
+    if (!verificationData || !verificationData.verified) {
       return res.status(400).json({
         success: false,
-        message: "No verification found for this email",
+        message: verificationData ? "Email is not verified yet" : "No verification found for this email",
       });
     }
 
-    if (verificationData.verified !== true) {
-      return res.status(400).json({
-        success: false,
-        message: "Email is not verified yet",
-      });
-    }
-
-    // ✅ Step 2: Hash password
+    // ✅ Step 2: Hash password asynchronously
     const hashedPassword = await bcrypt.hash(password, 10); // saltRounds = 10
 
-    // ✅ Step 3: Insert into students table
-    const studentResult = await pool.query(
-      `INSERT INTO students 
+    // ✅ Step 3: Insert into students table (return only necessary columns)
+    const insertQuery = `
+      INSERT INTO students 
       (email, password, name, father_guardian_name, dob, blood_group, student_contact_number, parent_guardian_contact_number, address, department, academic_year, registration_number, roll_number, room_number, profile_photo) 
       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15) 
-      RETURNING *`,
-      [
-        email,
-        hashedPassword,
-        name,
-        father_guardian_name,
-        dob,
-        blood_group,
-        student_contact_number,
-        parent_guardian_contact_number,
-        address,
-        department,
-        academic_year,
-        registration_number,
-        roll_number,
-        room_number,
-        profile_photo,
-      ]
-    );
+      RETURNING id, email, name, registration_number, department, academic_year
+    `;
+
+    const studentResult = await pool.query(insertQuery, [
+      email,
+      hashedPassword,
+      name,
+      father_guardian_name,
+      dob,
+      blood_group,
+      student_contact_number,
+      parent_guardian_contact_number,
+      address,
+      department,
+      academic_year,
+      registration_number,
+      roll_number,
+      room_number,
+      profile_photo,
+    ]);
 
     return res.status(201).json({
       success: true,
       message: "User registered successfully",
       user: studentResult.rows[0],
     });
+
   } catch (err) {
-    console.error("Server Error:", err);
+    console.error("Registration Error:", err);
     return res.status(500).json({
       success: false,
       message: "Internal server error",
@@ -97,4 +100,4 @@ async function registeration(req, res) {
   }
 }
 
-export default registeration;
+export default registration;
