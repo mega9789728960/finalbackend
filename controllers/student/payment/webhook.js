@@ -1,4 +1,4 @@
-import pool from "../../../database/database.js";
+import pool from "../../../database/database.js"; 
 import { Cashfree, CFEnvironment } from "cashfree-pg";
 
 // Initialize Cashfree SDK
@@ -14,7 +14,7 @@ export default async function paymentWebhook(req, res) {
     const timestamp = req.headers["x-webhook-timestamp"];
     const rawBody = req.rawBody;
 
-    // ✅ Verify authenticity
+    // Verify authenticity
     const isValid = cashfree.PGVerifyWebhookSignature(
       signature,
       rawBody,
@@ -23,15 +23,13 @@ export default async function paymentWebhook(req, res) {
 
     if (!isValid) {
       console.log("❌ Invalid webhook signature");
-      return res
-        .status(400)
-        .json({ success: false, message: "Invalid signature" });
+      return res.status(400).json({ success: false, message: "Invalid signature" });
     }
 
     console.log("✅ Webhook verified successfully!");
     console.log("Webhook data:", req.body);
 
-    // Extract important data
+    // Extract data
     const body = req.body;
     const data = body.data;
 
@@ -57,7 +55,20 @@ export default async function paymentWebhook(req, res) {
     const gatewaySettlement = data.payment_gateway_details.gateway_settlement;
 
     // ---------------------------------------------------------
-    // ✅ Insert into payments table
+    // 🛡️ Prevent duplicate payment entry
+    // ---------------------------------------------------------
+    const existing = await pool.query(
+      "SELECT id FROM payments WHERE cf_payment_id = $1",
+      [cfPaymentId]
+    );
+
+    if (existing.rows.length > 0) {
+      console.log("⚠️ Duplicate webhook ignored for:", cfPaymentId);
+      return res.status(200).json({ success: true, duplicate: true });
+    }
+
+    // ---------------------------------------------------------
+    // Insert into payments table
     // ---------------------------------------------------------
     await pool.query(
       `INSERT INTO payments (
@@ -102,14 +113,14 @@ export default async function paymentWebhook(req, res) {
         gatewayPaymentId,
         gatewayOrderId,
         gatewaySettlement,
-        body // store full webhook
+        body
       ]
     );
 
     console.log("✅ Payment recorded in payments table");
 
     // ---------------------------------------------------------
-    // UPDATE YOUR EXISTING MESS BILL TABLE
+    // Update mess bill table
     // ---------------------------------------------------------
     if (paymentStatus === "SUCCESS") {
       await pool.query(
@@ -128,6 +139,7 @@ export default async function paymentWebhook(req, res) {
     }
 
     console.log(`✅ Updated mess bill (${orderId}) to status: ${paymentStatus}`);
+
     res.status(200).json({ success: true });
 
   } catch (err) {
