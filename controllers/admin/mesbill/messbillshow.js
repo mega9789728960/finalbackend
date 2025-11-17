@@ -74,7 +74,7 @@ export const fetchMonthlyCalculations = async (req, res) => {
           total_expenditure: row.total_expenditure,
           expenditure_after_income: row.expenditure_after_income,
           mess_fee_per_day: row.mess_fee_per_day,
-          progress_stage: row.progress_stage,
+      
           veg_served_days: row.veg_served_days,
           nonveg_served_days: row.nonveg_served_days,
           reduction_applicable_days: row.reduction_applicable_days,
