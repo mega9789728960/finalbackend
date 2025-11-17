@@ -99,7 +99,7 @@ import createorderrouter from "../routers/student/payment/createorder.js";
 import messbillpush from "../routers/admin/messbill/messbillpush.js";
 import messbillshow from "../routers/admin/messbill/messbillshow.js";
 import insertstudentmessbill from "../routers/admin/messbill/insertstudentmessbill.js";
-import fetchstudentsmessbill from "../routers/admin/messbill/fetchstudentsmessbill.js";
+
 import messbillupdate from "../routers/admin/messbill/messbillupdate.js";
 
 import updatemessbill from "../routers/admin/messbill/updatestudentsmessbill.js";
@@ -163,7 +163,7 @@ api.use(messbillpush)
 
 api.use(messbillshow)
 api.use(insertstudentmessbill)
-api.use(fetchstudentsmessbill)
+
 api.use(updatemessbill)
 api.use(messbillupdate)
 
