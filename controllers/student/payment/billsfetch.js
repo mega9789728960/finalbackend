@@ -40,7 +40,7 @@ const showPaidMessBillsByStudentId = async (req, res) => {
         mbc.total_expenditure,
         mbc.expenditure_after_income,
         mbc.mess_fee_per_day,
-        mbc.progress_stage,
+       
         mbc.veg_served_days,
         mbc.nonveg_served_days,
         mbc.reduction_applicable_days
