@@ -4,8 +4,9 @@ import { Cashfree, CFEnvironment } from "cashfree-pg";
 // 🏦 Cashfree configuration (Sandbox mode)
 const cashfree = new Cashfree(
   CFEnvironment.SANDBOX,
-  "TEST108360771478c4665f846cfe949877063801",
-  "cfsk_ma_test_b560921740a233497ed2b83bf3ce4599_113f10f2"
+  process.env.APP_ID,
+  process.env.PAYMENT_KEY
+  
 );
 
 // 🔢 Generate unique order_id (student_id + year_month + timestamp)

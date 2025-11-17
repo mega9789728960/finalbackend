@@ -26,7 +26,7 @@ export const fetchMonthlyCalculations = async (req, res) => {
         b.expenditure_after_income,
         b.mess_fee_per_day,
         b.created_at,
-        b.progress_stage,
+       
         b.veg_served_days,
         b.nonveg_served_days,
         b.reduction_applicable_days,
