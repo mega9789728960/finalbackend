@@ -1,4 +1,4 @@
-import pool from "../../../database/database.js"; 
+import pool from "../../../database/database.js";
 import { Cashfree, CFEnvironment } from "cashfree-pg";
 
 // Initialize Cashfree SDK
@@ -23,7 +23,9 @@ export default async function paymentWebhook(req, res) {
 
     if (!isValid) {
       console.log("❌ Invalid webhook signature");
-      return res.status(400).json({ success: false, message: "Invalid signature" });
+      return res
+        .status(400)
+        .json({ success: false, message: "Invalid signature" });
     }
 
     console.log("✅ Webhook verified successfully!");
@@ -55,11 +57,14 @@ export default async function paymentWebhook(req, res) {
     const gatewaySettlement = data.payment_gateway_details.gateway_settlement;
 
     // ---------------------------------------------------------
-    // 🛡️ Prevent duplicate payment entry
+    // 🛡️ Strong Duplicate Prevention
     // ---------------------------------------------------------
     const existing = await pool.query(
-      "SELECT id FROM payments WHERE cf_payment_id = $1",
-      [cfPaymentId]
+      `SELECT id FROM payments 
+       WHERE cf_payment_id = $1 
+       OR gateway_payment_id = $2 
+       OR gateway_order_id = $3`,
+      [cfPaymentId, gatewayPaymentId, gatewayOrderId]
     );
 
     if (existing.rows.length > 0) {
@@ -68,54 +73,63 @@ export default async function paymentWebhook(req, res) {
     }
 
     // ---------------------------------------------------------
-    // Insert into payments table
+    // Insert into payments table (SAFE)
     // ---------------------------------------------------------
-    await pool.query(
-      `INSERT INTO payments (
-        order_id,
-        order_amount,
-        order_currency,
-        cf_payment_id,
-        payment_status,
-        payment_amount,
-        payment_time,
-        bank_reference,
-        payment_method,
-        customer_id,
-        customer_name,
-        customer_email,
-        customer_phone,
-        gateway_name,
-        gateway_payment_id,
-        gateway_order_id,
-        gateway_settlement,
-        raw_webhook
-      ) VALUES (
-        $1, $2, $3, $4, $5, $6, $7, $8, $9,
-        $10, $11, $12, $13,
-        $14, $15, $16, $17, $18
-      )`,
-      [
-        orderId,
-        orderAmount,
-        orderCurrency,
-        cfPaymentId,
-        paymentStatus,
-        paymentAmount,
-        paymentTime,
-        bankReference,
-        paymentMethod,
-        customerId,
-        customerName,
-        customerEmail,
-        customerPhone,
-        gatewayName,
-        gatewayPaymentId,
-        gatewayOrderId,
-        gatewaySettlement,
-        body
-      ]
-    );
+    try {
+      await pool.query(
+        `INSERT INTO payments (
+            order_id,
+            order_amount,
+            order_currency,
+            cf_payment_id,
+            payment_status,
+            payment_amount,
+            payment_time,
+            bank_reference,
+            payment_method,
+            customer_id,
+            customer_name,
+            customer_email,
+            customer_phone,
+            gateway_name,
+            gateway_payment_id,
+            gateway_order_id,
+            gateway_settlement,
+            raw_webhook
+        ) VALUES (
+            $1, $2, $3, $4, $5, $6, $7, $8, $9,
+            $10, $11, $12, $13,
+            $14, $15, $16, $17, $18
+        )`,
+        [
+          orderId,
+          orderAmount,
+          orderCurrency,
+          cfPaymentId,
+          paymentStatus,
+          paymentAmount,
+          paymentTime,
+          bankReference,
+          paymentMethod,
+          customerId,
+          customerName,
+          customerEmail,
+          customerPhone,
+          gatewayName,
+          gatewayPaymentId,
+          gatewayOrderId,
+          gatewaySettlement,
+          body
+        ]
+      );
+    } catch (err) {
+      // UNIQUE KEY VIOLATION
+      if (err.code === "23505") {
+        console.log("⚠️ Duplicate insert blocked by UNIQUE constraint");
+        return res.status(200).json({ success: true, duplicate: true });
+      }
+      throw err;
+    }
 
     console.log("✅ Payment recorded in payments table");
 
@@ -138,10 +152,9 @@ export default async function paymentWebhook(req, res) {
       );
     }
 
-    console.log(`✅ Updated mess bill (${orderId}) to status: ${paymentStatus}`);
+    console.log(`✅ Updated mess bill (${orderId}) → ${paymentStatus}`);
 
     res.status(200).json({ success: true });
-
   } catch (err) {
     console.error("❌ Webhook error:", err.message);
     res.status(500).json({ error: err.message });
