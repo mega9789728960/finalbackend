@@ -15,41 +15,121 @@ export default async function paymentWebhook(req, res) {
     const rawBody = req.rawBody;
 
     // ✅ Verify authenticity
-    const isValid = cashfree.PGVerifyWebhookSignature(signature, rawBody, timestamp);
+    const isValid = cashfree.PGVerifyWebhookSignature(
+      signature,
+      rawBody,
+      timestamp
+    );
 
     if (!isValid) {
       console.log("❌ Invalid webhook signature");
-      return res.status(400).json({ success: false, message: "Invalid signature" });
+      return res
+        .status(400)
+        .json({ success: false, message: "Invalid signature" });
     }
 
     console.log("✅ Webhook verified successfully!");
     console.log("Webhook data:", req.body);
 
     // Extract important data
-    const eventData = req.body;
-    const orderId = eventData.order_id; // your custom order ID
-    const cfOrderId = eventData.data.payment_gateway_details.gateway_order_id; // Cashfree's order ID
-    const orderStatus = eventData.data.payment.payment_status; // Example: "SUCCESS", "FAILED", etc.
+    const body = req.body;
+    const data = body.data;
 
-    // ✅ Update your database
-    if (orderStatus === "SUCCESS") {
+    const orderId = data.order.order_id;
+    const orderAmount = data.order.order_amount;
+    const orderCurrency = data.order.order_currency;
+
+    const cfPaymentId = data.payment.cf_payment_id;
+    const paymentStatus = data.payment.payment_status;
+    const paymentAmount = data.payment.payment_amount;
+    const paymentTime = data.payment.payment_time;
+    const bankReference = data.payment.bank_reference;
+    const paymentMethod = data.payment.payment_method;
+
+    const customerId = data.customer_details.customer_id;
+    const customerName = data.customer_details.customer_name;
+    const customerEmail = data.customer_details.customer_email;
+    const customerPhone = data.customer_details.customer_phone;
+
+    const gatewayName = data.payment_gateway_details.gateway_name;
+    const gatewayPaymentId = data.payment_gateway_details.gateway_payment_id;
+    const gatewayOrderId = data.payment_gateway_details.gateway_order_id;
+    const gatewaySettlement = data.payment_gateway_details.gateway_settlement;
+
+    // ---------------------------------------------------------
+    // ✅ Insert into payments table
+    // ---------------------------------------------------------
+    await pool.query(
+      `INSERT INTO payments (
+        order_id,
+        order_amount,
+        order_currency,
+        cf_payment_id,
+        payment_status,
+        payment_amount,
+        payment_time,
+        bank_reference,
+        payment_method,
+        customer_id,
+        customer_name,
+        customer_email,
+        customer_phone,
+        gateway_name,
+        gateway_payment_id,
+        gateway_order_id,
+        gateway_settlement,
+        raw_webhook
+      ) VALUES (
+        $1, $2, $3, $4, $5, $6, $7, $8, $9,
+        $10, $11, $12, $13,
+        $14, $15, $16, $17, $18
+      )`,
+      [
+        orderId,
+        orderAmount,
+        orderCurrency,
+        cfPaymentId,
+        paymentStatus,
+        paymentAmount,
+        paymentTime,
+        bankReference,
+        paymentMethod,
+        customerId,
+        customerName,
+        customerEmail,
+        customerPhone,
+        gatewayName,
+        gatewayPaymentId,
+        gatewayOrderId,
+        gatewaySettlement,
+        body // store full webhook
+      ]
+    );
+
+    console.log("✅ Payment recorded in payments table");
+
+    // ---------------------------------------------------------
+    // UPDATE YOUR EXISTING MESS BILL TABLE
+    // ---------------------------------------------------------
+    if (paymentStatus === "SUCCESS") {
       await pool.query(
         `UPDATE mess_bill_for_students 
          SET status = $1, updated_at = NOW(), paid_date = NOW()
          WHERE latest_order_id = $2`,
-        [orderStatus, cfOrderId]
+        [paymentStatus, gatewayOrderId]
       );
     } else {
       await pool.query(
         `UPDATE mess_bill_for_students 
          SET status = $1, updated_at = NOW()
          WHERE latest_order_id = $2`,
-        [orderStatus, cfOrderId]
+        [paymentStatus, gatewayOrderId]
       );
     }
 
-    console.log(`✅ Updated order (${orderId}) to status: ${orderStatus}`);
+    console.log(`✅ Updated mess bill (${orderId}) to status: ${paymentStatus}`);
     res.status(200).json({ success: true });
+
   } catch (err) {
     console.error("❌ Webhook error:", err.message);
     res.status(500).json({ error: err.message });
